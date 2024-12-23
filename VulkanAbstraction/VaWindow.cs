@@ -1,9 +1,11 @@
-﻿using Common;
+﻿using System.Numerics;
+using Common;
 using Silk.NET.SDL;
 using Silk.NET.Vulkan;
 using StupidSimpleLogger;
 using VulkanAbstraction.Common;
 using VulkanAbstraction.Helpers;
+using VulkanAbstraction.Pipelines;
 using Window = Common.Window;
 
 namespace VulkanAbstraction;
@@ -12,8 +14,9 @@ public unsafe class VaWindow : Window
 {
     public VaContext Context { get; private set; }
     public VaVulkanVersion VulkanVersion { get; set; }
-    public bool IsFullscreen { get; set; } = false;
 
+    public static List<Mesh> Meshes = new();
+    
     public Extent2D Extent()
     {
         var extent = new Extent2D();
@@ -32,6 +35,8 @@ public unsafe class VaWindow : Window
         context.Sdl = _sdl;
         VulkanVersion = vulkanVersion;
     }
+    
+    private List<VaPipeline> _pipelines = new();
 
     public override void Load()
     {
@@ -40,12 +45,9 @@ public unsafe class VaWindow : Window
         // include the debug extension for message output
         Context.Instance = Helpers.CommonHelper.CreateInstance(this._title, new[]
             {
-                "VK_EXT_debug_utils",
+                "VK_EXT_debug_utils"
             },
-            new[]
-            {
-                "VK_LAYER_KHRONOS_validation",
-            }, 
+            new string[0], 
             VulkanVersion, _window, _sdl, out var messengerExt);
         Context.DebugMessenger = messengerExt;
         
@@ -69,9 +71,20 @@ public unsafe class VaWindow : Window
 
         // Create the swapchain.
         Context.Swapchain = new VaSwapchain(Context.Surface, _sdl);
-        
-        
         Logger.Info("Vulkan Context Loaded", $"Context: {Context}");
+        
+        // Create a default pipeline.
+        _pipelines.Add(new VaPipeline("default", "./Shaders/test.vert", "./Shaders/test.frag"));
+        
+        // Create a mesh.
+        var meshResult = AssimpHelper.LoadModel("./Models/Duck.glb");
+        Meshes.Add(new Mesh(meshResult.Item1, meshResult.Item2, "default"){Transform = new Transform(new Vector3(2,0,-2), Quaternion.Identity, new Vector3(0.005f))});
+        Meshes.Add(new Mesh(meshResult.Item1, meshResult.Item2, "default"){Transform = new Transform(new Vector3(0,2,-2), Quaternion.Identity, new Vector3(0.005f))});
+        Meshes.Add(new Mesh(meshResult.Item1, meshResult.Item2, "default"){Transform = new Transform(new Vector3(-1,2,-2), Quaternion.Identity, new Vector3(0.005f))});
+        Meshes.Add(new Mesh(meshResult.Item1, meshResult.Item2, "default"){Transform = new Transform(new Vector3(2,-1,-2), Quaternion.Identity, new Vector3(0.005f))});
+
+        
+        Context.Swapchain.CreateCommandBuffers(); // This requires the pipelines to be created first, however the pipeline is also dependent on the swapchain, so we have to create the pipelines first.
     }
 
     public override void Update()
@@ -117,6 +130,8 @@ public unsafe class VaWindow : Window
         }
         
         var commandBuffer = Context.Swapchain.CommandBuffers[index];
+        
+        CommandHelper.PopulateCommandBuffer(commandBuffer, Context.Swapchain, (int)index);
         
         // Submit command buffer
         var waitDstStageMask = PipelineStageFlags.ColorAttachmentOutputBit;
@@ -167,6 +182,7 @@ public unsafe class VaWindow : Window
     public override void Unload()
     {
         Logger.Warning("Closing","Program is closing, starting deletion queue");
+        Context.Vk.DeviceWaitIdle(Context.Device);
         // Start the deletion queue.
         while (Context.DeletionQueue.Count > 0)
         {
@@ -203,18 +219,5 @@ public unsafe class VaWindow : Window
         Logger.Info("Vulkan Context Unloaded");
     }
 
-    public void SetWindowed()
-    {
-        _sdl.SetWindowFullscreen(_window, (uint)WindowFlags.Resizable);
-        IsFullscreen = false;
-    }
-    
-    /// <summary>
-    /// Sets the window to fullscreen. Uses borderless fullscreen.
-    /// </summary>
-    public void SetFullscreen()
-    {
-        _sdl.SetWindowFullscreen(_window, (uint)WindowFlags.FullscreenDesktop);
-        IsFullscreen = true;
-    }
+
 }

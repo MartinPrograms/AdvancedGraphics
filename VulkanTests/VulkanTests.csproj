@@ -15,4 +15,16 @@
       <PackageReference Include="StupidSimpleLogger" Version="1.0.8" />
     </ItemGroup>
 
+    <ItemGroup>
+      <None Update="Shaders\test.vert">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+      <None Update="Shaders\test.frag">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+      <None Update="Models\Duck.glb">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+    </ItemGroup>
+
 </Project>

@@ -22,6 +22,8 @@ public abstract class Window
     public Vector2 Size => new Vector2(_width, _height);
     public Vector2 Center => new Vector2(_width / 2, _height / 2);
     public WindowFlags Flags => _windowFlags;
+
+    public bool IsFullscreen = false;
     
     public double AspectRatio => (double)_width / _height;
     public double DeltaTime { get; protected set; }
@@ -112,7 +114,14 @@ public abstract class Window
             
             Input.Update();
             
+            int width = _width;
+            int height = _height;
             _sdl.GetWindowSize(_window, ref _width, ref _height); // Update window size
+            
+            if (width != _width || height != _height)
+            {
+                OnResize?.Invoke(_width, _height);
+            }
             
             var currentTime = DateTime.Now;
             DeltaTime = (currentTime - _lastFrameTime).TotalSeconds;
@@ -133,6 +142,8 @@ public abstract class Window
             
             _fpsLog[_fpsLogIndex] = 1 / DeltaTime;
             _fpsLogIndex = (_fpsLogIndex + 1) % _fpsLog.Length;
+            
+            Time.Update(DeltaTime);
         }
         
         OnUnload?.Invoke();
@@ -149,6 +160,7 @@ public abstract class Window
         _windowFlags = flags;
         _sdl.GetWindowSize(_window, ref _width, ref _height); // Update window size
 
+        OnResize?.Invoke(_width, _height);
     }
     
     public abstract void Load();
@@ -159,4 +171,21 @@ public abstract class Window
     public Action OnLoad;
     public Action OnUpdate; // onrender changes per api so it's not here
     public Action OnUnload;
+    
+    public Action<int, int> OnResize;
+    
+    public void SetWindowed()
+    {
+        SetWindowMode(WindowFlags.Resizable);
+        IsFullscreen = false;
+    }
+    
+    /// <summary>
+    /// Sets the window to fullscreen. Uses borderless fullscreen.
+    /// </summary>
+    public void SetFullscreen()
+    {
+        SetWindowMode(WindowFlags.FullscreenDesktop);
+        IsFullscreen = true;
+    }
 }

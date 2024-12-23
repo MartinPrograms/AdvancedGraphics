@@ -1,5 +1,7 @@
-﻿using Silk.NET.Vulkan;
+﻿using System.Runtime.CompilerServices;
+using Silk.NET.Vulkan;
 using VulkanAbstraction.Common;
+using VulkanAbstraction.Pipelines;
 
 namespace VulkanAbstraction.Helpers;
 
@@ -55,9 +57,20 @@ public class CommandHelper
             throw new Exception("Vulkan API is not initialized");
         }
         // This clears the screen with a color.
-        ClearValue clearValue = new()
+        ClearValue colorClear = new()
         {
-            Color = new ClearColorValue(0.2f, 0.3f, 0.5f, 1.0f)
+            Color = new ClearColorValue(0.2f, 0.3f, 0.5f, 1.0f),
+        };
+        
+        ClearValue depthClear = new()
+        {
+            DepthStencil = new ClearDepthStencilValue(1.0f, 0)
+        };
+        
+        ClearValue[] clearValues = new ClearValue[]
+        {
+            colorClear,
+            depthClear
         };
         
         RenderPassBeginInfo renderPassInfo = new()
@@ -70,14 +83,14 @@ public class CommandHelper
                 Offset = new Offset2D(0, 0),
                 Extent = contextSwapchain.SwapchainExtent
             },
-            ClearValueCount = 1,
-            PClearValues = &clearValue
+            ClearValueCount = 2,
+            PClearValues = (ClearValue*)Unsafe.AsPointer(ref clearValues[0])
         };
         // This command buffer will be reused.
         CommandBufferBeginInfo beginInfo = new()
         {
             SType = StructureType.CommandBufferBeginInfo,
-            Flags = CommandBufferUsageFlags.SimultaneousUseBit // This is the flag that allows us to reuse the command buffer.
+            Flags = CommandBufferUsageFlags.OneTimeSubmitBit
         };
         
         vk.BeginCommandBuffer(contextCommandBuffer, &beginInfo);
@@ -91,22 +104,37 @@ public class CommandHelper
             ImageLayout.ColorAttachmentOptimal
         );
         
+        vk.CmdBeginRenderPass(contextCommandBuffer, &renderPassInfo, SubpassContents.Inline);
+        
         // Here we should do rendering and what not.
         
         // BEGIN RENDERING HERE!
         
+        Viewport viewport = new()
+        {
+            X = 0.0f,
+            Y = 0.0f,
+            Width = contextSwapchain.SwapchainExtent.Width,
+            Height = contextSwapchain.SwapchainExtent.Height,
+            MinDepth = 0.0f,
+            MaxDepth = 1.0f
+        };
+        
+        Rect2D scissor = new()
+        {
+            Offset = new Offset2D(0, 0),
+            Extent = contextSwapchain.SwapchainExtent
+        };
+        
+        vk.CmdSetViewport(contextCommandBuffer, 0, 1, &viewport);
+        vk.CmdSetScissor(contextCommandBuffer, 0, 1, &scissor);
+        
+        foreach (var mesh in VaWindow.Meshes)
+        {
+            mesh.Draw(contextCommandBuffer);
+        }
         
         // STOPS HERE!
-        
-        // Transition the image from VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL to VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
-        ImageHelper.TransitionImageLayout(contextCommandBuffer,
-            contextSwapchain.SwapchainImages[index],
-            contextSwapchain.SwapchainMode.SwapchainImageFormat,
-            ImageLayout.ColorAttachmentOptimal,
-            ImageLayout.PresentSrcKhr
-        );
-        
-        vk.CmdBeginRenderPass(contextCommandBuffer, &renderPassInfo, SubpassContents.Inline);
         
         // There is nothing to render, so we just end the render pass.
         vk.CmdEndRenderPass(contextCommandBuffer);

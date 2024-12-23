@@ -51,4 +51,25 @@ public class VaContext
         
         Device = Helpers.DeviceHelper.LoadLogicalDevice(PhysicalDevice, out indices, extensions); // This creates the logical device and the queues.
     }
+
+    public uint FindMemoryType(uint memoryRequirementsMemoryTypeBits, MemoryPropertyFlags flags)
+    {
+        var vk = Current?.Vk;
+        if (vk == null)
+        {
+            throw new Exception("Vulkan API is not initialized");
+        }
+        
+        var memoryProperties = vk.GetPhysicalDeviceMemoryProperties(Current.PhysicalDevice);
+        
+        for (uint i = 0; i < memoryProperties.MemoryTypeCount; i++)
+        {
+            if ((memoryRequirementsMemoryTypeBits & (1 << (int)i)) != 0 && (memoryProperties.MemoryTypes[(int)i].PropertyFlags & flags) == flags)
+            {
+                return i;
+            }
+        }
+        
+        throw new Exception("Failed to find suitable memory type");
+    }
 }

@@ -1,4 +1,6 @@
-﻿using Silk.NET.SDL;
+﻿using System.Numerics;
+using System.Runtime.CompilerServices;
+using Silk.NET.SDL;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.KHR;
 using StupidSimpleLogger;
@@ -27,11 +29,17 @@ public class VaSwapchain
     public Framebuffer[] Framebuffers = default;
     public CommandBuffer[] CommandBuffers = default;
     
+    public Image[] DepthImages = default;
+    public ImageView[] DepthImageViews = default;
+    public DeviceMemory[] DepthImageMemory = default;
+    
     public KhrSwapchain SwapchainExtension = default;
-
+    
     public unsafe VaSwapchain(SurfaceKHR window, Sdl sdl)
     {
         Create(window, sdl);
+        
+        Logger.Info("Swapchain", "Mesh uniform buffer created");
     }
 
     public uint MaxFramesInFlight => ImageCount;
@@ -67,6 +75,10 @@ public class VaSwapchain
 
         Logger.Info("Swapchain", "Fences created");
         
+        CreateDepthResources(vk);
+        
+        Logger.Info("Swapchain", "Depth resources created");
+        
         // Create the render pass.
         CreateRenderPass(vk);
 
@@ -75,9 +87,6 @@ public class VaSwapchain
         CreateFramebuffers(vk);
 
         Logger.Info("Swapchain", "Framebuffers created");
-        
-        CreateCommandBuffers();
-
         VaContext.Current.DeletionQueue.Push((a) =>
         {
             Destroy();
@@ -86,8 +95,23 @@ public class VaSwapchain
         Logger.Info("Swapchain", "Swapchain finished");
     }
 
+    private void CreateDepthResources(Vk vk)
+    {
+        var depthFormat = CommonHelper.FindDepthFormat(VaContext.Current.PhysicalDevice);
+        
+        DepthImages = new Image[SwapchainImages.Length];
+        DepthImageViews = new ImageView[SwapchainImages.Length];
+        DepthImageMemory = new DeviceMemory[SwapchainImages.Length];
+        
+        for (var i = 0; i < SwapchainImages.Length; i++)
+        {
+            ImageHelper.CreateImage(SwapchainExtent.Width, SwapchainExtent.Height, depthFormat, ImageTiling.Optimal, ImageUsageFlags.DepthStencilAttachmentBit, MemoryPropertyFlags.DeviceLocalBit, out DepthImages[i], out DepthImageMemory[i]);
+            DepthImageViews[i] = ImageHelper.CreateImageView(DepthImages[i], depthFormat, ImageAspectFlags.DepthBit);
+        }
+    }
+
     #region Creation
-    private void CreateCommandBuffers()
+    public void CreateCommandBuffers()
     {
         CommandBuffers = new CommandBuffer[SwapchainImageViews.Length];
 
@@ -107,12 +131,12 @@ public class VaSwapchain
         Framebuffers = new Framebuffer[SwapchainImageViews.Length];
         for (var i = 0; i < SwapchainImageViews.Length; i++)
         {
-            var attachments = stackalloc ImageView[1] {SwapchainImageViews[i]};
+            var attachments = stackalloc ImageView[2] {SwapchainImageViews[i], DepthImageViews[i]};
             var framebufferCreateInfo = new FramebufferCreateInfo
             {
                 SType = StructureType.FramebufferCreateInfo,
                 RenderPass = RenderPass,
-                AttachmentCount = 1,
+                AttachmentCount = 2,
                 PAttachments = attachments,
                 Width = SwapchainExtent.Width,
                 Height = SwapchainExtent.Height,
@@ -141,17 +165,36 @@ public class VaSwapchain
             FinalLayout = ImageLayout.PresentSrcKhr
         };
         
+        var depthAttachment = new AttachmentDescription
+        {
+            Format = CommonHelper.FindDepthFormat(VaContext.Current.PhysicalDevice),
+            Samples = SampleCountFlags.SampleCount1Bit,
+            LoadOp = AttachmentLoadOp.Clear,
+            StoreOp = AttachmentStoreOp.DontCare,
+            StencilLoadOp = AttachmentLoadOp.DontCare,
+            StencilStoreOp = AttachmentStoreOp.DontCare,
+            InitialLayout = ImageLayout.Undefined,
+            FinalLayout = ImageLayout.DepthStencilAttachmentOptimal
+        };
+        
         var colorAttachmentRef = new AttachmentReference
         {
             Attachment = 0,
             Layout = ImageLayout.ColorAttachmentOptimal
         };
         
+        var depthAttachmentRef = new AttachmentReference
+        {
+            Attachment = 1,
+            Layout = ImageLayout.DepthStencilAttachmentOptimal
+        };
+        
         var subpass = new SubpassDescription
         {
             PipelineBindPoint = PipelineBindPoint.Graphics,
             ColorAttachmentCount = 1,
-            PColorAttachments = &colorAttachmentRef
+            PColorAttachments = &colorAttachmentRef,
+            PDepthStencilAttachment = &depthAttachmentRef
         };
         
         var dependency = new SubpassDependency
@@ -164,15 +207,19 @@ public class VaSwapchain
             DstAccessMask = AccessFlags.ColorAttachmentReadBit | AccessFlags.ColorAttachmentWriteBit
         };
         
+        var attachments = new AttachmentDescription[2] {colorAttachment, depthAttachment};
+        var subpasses = new SubpassDescription[1] {subpass};
+        var dependencies = new SubpassDependency[1] {dependency};
+        
         var renderPassInfo = new RenderPassCreateInfo
         {
             SType = StructureType.RenderPassCreateInfo,
-            AttachmentCount = 1,
-            PAttachments = &colorAttachment,
-            SubpassCount = 1,
-            PSubpasses = &subpass,
-            DependencyCount = 1,
-            PDependencies = &dependency
+            AttachmentCount = (uint)attachments.Length,
+            PAttachments = (AttachmentDescription*)Unsafe.AsPointer(ref attachments[0]),
+            SubpassCount = (uint)subpasses.Length,
+            PSubpasses = (SubpassDescription*)Unsafe.AsPointer(ref subpasses[0]),
+            DependencyCount = (uint)dependencies.Length,
+            PDependencies = (SubpassDependency*)Unsafe.AsPointer(ref dependencies[0])
         };
         
         var resultRenderPass = vk.CreateRenderPass(VaContext.Current.Device, &renderPassInfo, null, out RenderPass);
@@ -403,6 +450,14 @@ public class VaSwapchain
             VaContext.Current.Vk.FreeCommandBuffers(VaContext.Current.Device, VaContext.Current.CommandPool, 1, &commandBuffer);
         }
         
+        // Destroy the depth resources.
+        for (var i = 0; i < DepthImages.Length; i++)
+        {
+            VaContext.Current.Vk.DestroyImageView(VaContext.Current.Device, DepthImageViews[i], null);
+            VaContext.Current.Vk.DestroyImage(VaContext.Current.Device, DepthImages[i], null);
+            VaContext.Current.Vk.FreeMemory(VaContext.Current.Device, DepthImageMemory[i], null);
+        }
+        
         // Destroy the render pass.
         VaContext.Current.Vk.DestroyRenderPass(VaContext.Current.Device, RenderPass, null);
         
@@ -415,6 +470,9 @@ public class VaSwapchain
         
         // Recreate the images and views.
         CreateImagesAndViews(swapchainExtension, VaContext.Current.Vk);
+        
+        // Create the depth resources.
+        CreateDepthResources(VaContext.Current.Vk);
         
         // Recreate the render pass.
         CreateRenderPass(VaContext.Current.Vk);

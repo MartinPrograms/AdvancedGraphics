@@ -6,18 +6,12 @@ public static class UnsafeExtensions
 {
     public static unsafe byte* ToPointer(this byte[] str)
     {
-        fixed (byte* p = str)
-        {
-            return p;
-        }
+        return (byte*)Marshal.UnsafeAddrOfPinnedArrayElement(str, 0).ToPointer();
     }
     
     public static unsafe byte* ToPointer(this string str)
     {
-        fixed (char* p = str)
-        {
-            return (byte*)p;
-        }
+        return (byte*)Marshal.StringToHGlobalAnsi(str).ToPointer();
     }
     
     public static unsafe string ToString(byte* str)

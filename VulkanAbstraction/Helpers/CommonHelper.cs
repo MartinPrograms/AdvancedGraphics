@@ -7,6 +7,7 @@ using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.KHR;
 using StupidSimpleLogger;
 using VulkanAbstraction.Common;
+using Buffer = Silk.NET.Vulkan.Buffer;
 
 namespace VulkanAbstraction.Helpers;
 
@@ -41,8 +42,12 @@ public class CommonHelper
         {
             extensionPtrs[i] = Marshal.StringToHGlobalAnsi(combinedExtensions[i]);
         }
+        
+        #if DEBUG
+        layers = layers.Append("VK_LAYER_KHRONOS_validation").ToArray();
+        #endif
 
-        var layerPtrs = new IntPtr[layers.Length];
+        var layerPtrs = new IntPtr[layers.Length + 1];
         for (int i = 0; i < layers.Length; i++)
         {
             layerPtrs[i] = Marshal.StringToHGlobalAnsi(layers[i]);
@@ -105,6 +110,10 @@ public class CommonHelper
         
         #endif
         
+        #if RELEASE
+        messengerExt = default;
+        #endif
+        
         return instance;
     }
 
@@ -133,4 +142,98 @@ public class CommonHelper
         
         return extent;
     }
+
+    public static unsafe void CreateBuffer(uint size, BufferUsageFlags bufferUsageUniformBufferBit, MemoryPropertyFlags flags, out Buffer buffer, out DeviceMemory memory)
+    {
+        var vk = VaContext.Current?.Vk;
+        if (vk == null)
+        {
+            throw new Exception("Vulkan API is not initialized");
+        }
+        
+        BufferCreateInfo bufferCreateInfo = new()
+        {
+            SType = StructureType.BufferCreateInfo,
+            Size = size,
+            Usage = bufferUsageUniformBufferBit,
+            SharingMode = SharingMode.Exclusive
+        };
+        
+        if (vk.CreateBuffer(VaContext.Current.Device, &bufferCreateInfo, null, out buffer) != Result.Success)
+        {
+            throw new Exception("Failed to create buffer");
+        }
+        
+        MemoryRequirements memoryRequirements;
+        vk.GetBufferMemoryRequirements(VaContext.Current.Device, buffer, &memoryRequirements);
+        
+        MemoryAllocateInfo allocateInfo = new()
+        {
+            SType = StructureType.MemoryAllocateInfo,
+            AllocationSize = memoryRequirements.Size,
+            MemoryTypeIndex = VaContext.Current.FindMemoryType(memoryRequirements.MemoryTypeBits, flags)
+        };
+        
+        if (vk.AllocateMemory(VaContext.Current.Device, &allocateInfo, null, out memory) != Result.Success)
+        {
+            throw new Exception("Failed to allocate memory");
+        }
+        
+        vk.BindBufferMemory(VaContext.Current.Device, buffer, memory, 0);
+    }
+
+    public static unsafe void CopyBuffer(Buffer stagingBuffer, Buffer buffer, uint size)
+    {
+        var vk = VaContext.Current?.Vk;
+        if (vk == null)
+        {
+            throw new Exception("Vulkan API is not initialized");
+        }
+        
+        CommandBuffer commandBuffer = CommandHelper.BeginSingleTimeCommands(VaContext.Current.Device, VaContext.Current.CommandPool);
+        
+        BufferCopy copyRegion = new()
+        {
+            Size = size
+        };
+        
+        vk.CmdCopyBuffer(commandBuffer, stagingBuffer, buffer, 1, &copyRegion);
+        
+        CommandHelper.EndSingleTimeCommands(VaContext.Current.Device, VaContext.Current.GraphicsQueue, VaContext.Current.CommandPool, commandBuffer);
+    }
+
+    public static Format FindDepthFormat(PhysicalDevice currentPhysicalDevice)
+    {
+        return FindSupportedFormat(new[]
+        {
+            Format.D32SfloatS8Uint,
+            Format.D32Sfloat,
+            Format.D24UnormS8Uint
+        }, ImageTiling.Optimal, FormatFeatureFlags.DepthStencilAttachmentBit, currentPhysicalDevice);
+    }
+
+    private static Format FindSupportedFormat(Format[] formats, ImageTiling optimal, FormatFeatureFlags depthStencilAttachmentBit, PhysicalDevice currentPhysicalDevice)
+    {
+        var vk = VaContext.Current?.Vk;
+        if (vk == null)
+        {
+            throw new Exception("Vulkan API is not initialized");
+        }
+        
+        foreach (var format in formats)
+        {
+            FormatProperties props = vk.GetPhysicalDeviceFormatProperties(currentPhysicalDevice, format);
+            if (optimal == ImageTiling.Linear && (props.LinearTilingFeatures & depthStencilAttachmentBit) == depthStencilAttachmentBit)
+            {
+                return format;
+            }
+            else if (optimal == ImageTiling.Optimal && (props.OptimalTilingFeatures & depthStencilAttachmentBit) == depthStencilAttachmentBit)
+            {
+                return format;
+            }
+        }
+        
+        throw new Exception("Failed to find supported format");
+    }
+
 }
