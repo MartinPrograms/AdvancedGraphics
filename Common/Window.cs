@@ -82,14 +82,13 @@ public abstract class Window
                 if (ev.Type == (uint)EventType.Mousebuttondown)
                 {
                     var mouseEvent = *(MouseButtonEvent*)&ev;
-                    Logger.Info("Mouse Button Down", $"Button: {mouseEvent.Button}, Clicks: {mouseEvent.Clicks}, X: {mouseEvent.X}, Y: {mouseEvent.Y}");
-                    Input.UpdateMouseButton(mouseEvent);
+                    Input.UpdateMouseButtonDown(MouseButtonConverter.FromSDL((byte)mouseEvent.Button));
                 }
                 
                 if (ev.Type == (uint)EventType.Mousebuttonup)
                 {
                     var mouseEvent = *(MouseButtonEvent*)&ev;
-                    Input.UpdateMouseButton(mouseEvent);
+                    Input.UpdateMouseButtonUp(MouseButtonConverter.FromSDL((byte)mouseEvent.Button));
                 }
                 
                 if (ev.Type == (uint)EventType.Mousemotion)

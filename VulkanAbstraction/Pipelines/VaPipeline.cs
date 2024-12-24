@@ -2,6 +2,7 @@
 using Silk.NET.Vulkan;
 using StupidSimpleLogger;
 using VulkanAbstraction.Helpers;
+using VulkanAbstraction.Pipelines.DescriptorSets;
 
 namespace VulkanAbstraction.Pipelines;
 
@@ -31,9 +32,8 @@ public class VaPipeline
     public Pipeline Pipeline;
     public VaShader Shader { get; set; }
     public PipelineLayout PipelineLayout { get; set; }
-    public DescriptorSetLayout DescriptorSetLayout { get; set; }
-    public DescriptorSet DescriptorSet;
-    public DescriptorPool DescriptorPool;
+
+    public VaDescriptorSet DescriptorSet { get; set; }
     
     private string VertexPath { get; set; }
     private string FragmentPath { get; set; }
@@ -43,7 +43,6 @@ public class VaPipeline
         Name = name;
         if (addToPipelines)
         Pipelines.Add(name, this);
-        
         
         VertexPath = vertexPath;
         FragmentPath = fragmentPath;
@@ -67,7 +66,7 @@ public class VaPipeline
         Logger.Info("Creating Pipeline", $"Name: {Name}");
         Logger.Info("Creating Pipeline", $"Shader Stages: {shaderStages.Length}");
 
-        DescriptorPool = DescriptorHelper.CreateDescriptorPool(VaContext.Current.Device); 
+        DescriptorSet = new VaDescriptorSet(); 
         
         PipelineInputAssemblyStateCreateInfo inputAssemblyState = new()
         {
@@ -84,8 +83,8 @@ public class VaPipeline
             PolygonMode = PolygonMode.Fill,
             LineWidth = 1,
             CullMode = CullModeFlags.None,
-            FrontFace = FrontFace.CounterClockwise,
-            DepthBiasEnable = false,
+            FrontFace = FrontFace.Clockwise,
+            DepthBiasEnable = false
         };
         
         PipelineMultisampleStateCreateInfo multisampleState = new()
@@ -112,13 +111,13 @@ public class VaPipeline
         };
 
         Result result;
-        var descriptorSetLayout = CreateDescriptorSetLayout();
 
+        var layout = DescriptorSet.VulkanLayout;
         PipelineLayoutCreateInfo pipelineLayoutInfo = new()
         {
             SType = StructureType.PipelineLayoutCreateInfo,
             SetLayoutCount = 1,
-            PSetLayouts = &descriptorSetLayout
+            PSetLayouts = &layout
         };
 
         result =
@@ -198,71 +197,14 @@ public class VaPipeline
             
             VaContext.Current.DeletionQueue.Push((c) =>
             {
-                c.Vk.DestroyDescriptorSetLayout(c.Device, DescriptorSetLayout, null);
-                c.Vk.DestroyDescriptorPool(c.Device, DescriptorPool, null);
+                c.Vk.DestroyDescriptorSetLayout(c.Device, DescriptorSet.VulkanLayout, null);
+                c.Vk.DestroyDescriptorPool(c.Device, DescriptorSet.DescriptorPool, null);
                 c.Vk.DestroyPipeline(c.Device, Pipeline, null);
                 c.Vk.DestroyPipelineLayout(c.Device, pipelineLayout, null);
             });
         }
     }
-
-    private unsafe DescriptorSetLayout CreateDescriptorSetLayout()
-    {
-        // We have a ubo, so we need a descriptor set layout
-        DescriptorSetLayoutBinding vboLayoutBinding = new()
-        {
-            Binding = 0,
-            DescriptorType = DescriptorType.StorageBuffer,
-            DescriptorCount = 1,
-            StageFlags = ShaderStageFlags.VertexBit,
-            PImmutableSamplers = null
-        };
-        
-        DescriptorSetLayoutBinding indicesLayoutBinding = new()
-        {
-            Binding = 1,
-            DescriptorType = DescriptorType.StorageBuffer,
-            DescriptorCount = 1,
-            StageFlags = ShaderStageFlags.VertexBit,
-            PImmutableSamplers = null
-        };
-        
-        DescriptorSetLayoutBinding uboLayoutBinding = new()
-        {
-            Binding = 3,
-            DescriptorType = DescriptorType.UniformBuffer,
-            DescriptorCount = 1,
-            StageFlags = ShaderStageFlags.VertexBit,
-            PImmutableSamplers = null
-        };
-        
-        DescriptorSetLayoutBinding[] bindings = new[]
-        {
-            vboLayoutBinding,
-            indicesLayoutBinding,
-            uboLayoutBinding
-        };
-        
-        DescriptorSetLayoutCreateInfo layoutInfo = new()
-        {
-            SType = StructureType.DescriptorSetLayoutCreateInfo,
-            BindingCount = 3,
-            PBindings = (DescriptorSetLayoutBinding*)Marshal.UnsafeAddrOfPinnedArrayElement(bindings, 0).ToPointer()
-        };
-        
-        DescriptorSetLayout descriptorSetLayout;
-        var result = VaContext.Current.Vk.CreateDescriptorSetLayout(VaContext.Current.Device, &layoutInfo, null, out descriptorSetLayout);
-        if (result != Result.Success)
-        {
-            throw new Exception($"Failed to create descriptor set layout: {result}");
-        }
-        
-        DescriptorSetLayout = descriptorSetLayout;
-        // Q: how do we get the descriptor set?
-        DescriptorSet = DescriptorHelper.AllocateDescriptorSet(descriptorSetLayout, DescriptorPool);
-        return descriptorSetLayout;
-    }
-
+    
     public VaPipeline Clone()
     {
         return new VaPipeline(Name, VertexPath, FragmentPath, false);

@@ -3,7 +3,8 @@ using Silk.NET.SDL;
 using Silk.NET.Shaderc;
 using StupidSimpleLogger;
 using VulkanAbstraction;
-using VulkanAbstraction.Common;
+using VulkanAbstraction.Common.Other;
+using VulkanAbstraction.Common.Other.Vulkan;
 using VulkanAbstraction.Helpers;
 
 Logger.Init();

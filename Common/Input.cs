@@ -23,12 +23,12 @@ public static class Input
     public static Vector2 MousePosition => _mousePosition;
     public static Vector2 MouseDelta => _mouseDelta;
     
-    private static List<MouseButtonEvent> _mouseButtonDown = new();
-    private static List<MouseButtonEvent> _previousMouseButtonDown = new();
-    private static List<MouseButtonEvent> _nextMouseButtonDown = new();
+    private static List<MouseButton> _mouseButtonDown = new();
+    private static List<MouseButton> _previousMouseButtonDown = new();
+    private static List<MouseButton> _nextMouseButtonDown = new();
 
-    public static bool IsMouseButtonDown(MouseButtonEvent button) =>
-        _mouseButtonDown.Any(x => (x.Button.Equals(button.Button) && x.State.Equals(button.State)));
+    public static bool IsMouseButtonDown(MouseButton button) =>
+        _mouseButtonDown.Any(x => x == button);
     
     public static void Update()
     {
@@ -58,16 +58,14 @@ public static class Input
         _nextMousePosition = new Vector2(x, y);
     }
     
-    public static void UpdateMouseButton(MouseButtonEvent @event)
+    public static void UpdateMouseButtonDown(MouseButton @event)
     {
-        if (@event.Type == 1)
-        {
-            _nextMouseButtonDown.Add(@event);
-        }
-        else
-        {
-            _nextMouseButtonDown.RemoveAll(x => x.Button == @event.Button);
-        }
+        _nextMouseButtonDown.Add(@event);
+    }
+    
+    public static void UpdateMouseButtonUp(MouseButton @event)
+    {
+        _nextMouseButtonDown.RemoveAll(x => x == @event);
     }
     
     public static void UpdateKeyDown(KeyCode keycode)

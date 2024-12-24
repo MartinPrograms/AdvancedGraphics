@@ -1,6 +1,9 @@
 ﻿using Silk.NET.SDL;
 using Silk.NET.Vulkan;
-using VulkanAbstraction.Common;
+using VulkanAbstraction.Common.Graphical;
+using VulkanAbstraction.Common.Other;
+using VulkanAbstraction.Common.Other.Vulkan;
+using VulkanAbstraction.Helpers.Vulkan.Other;
 
 namespace VulkanAbstraction;
 
@@ -47,9 +50,9 @@ public class VaContext
     public void LoadDevices(out QueueFamilyIndices indices, params string[] extensions)
     {
         // Here we load the physical and logical devices, the rest will be loaded in the future, as it requires a surface.
-        PhysicalDevice = Helpers.DeviceHelper.LoadPhysicalDevice(Instance); // This creates the physical device.
+        PhysicalDevice = DeviceHelper.LoadPhysicalDevice(Instance); // This creates the physical device.
         
-        Device = Helpers.DeviceHelper.LoadLogicalDevice(PhysicalDevice, out indices, extensions); // This creates the logical device and the queues.
+        Device = DeviceHelper.LoadLogicalDevice(PhysicalDevice, out indices, extensions); // This creates the logical device and the queues.
     }
 
     public uint FindMemoryType(uint memoryRequirementsMemoryTypeBits, MemoryPropertyFlags flags)

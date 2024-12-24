@@ -1,6 +1,7 @@
 ﻿#version 450
 
-
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_EXT_scalar_block_layout : enable
 
 struct Vertex {
     vec3 position;
@@ -29,17 +30,20 @@ layout (binding = 1) readonly buffer IndexBuffer {
     uint indices[];
 } ibo;
 
-layout (binding = 3) uniform UniformBufferObject {
+layout (std140, binding = 3) uniform UniformBufferObject {
     mat4 model;
     mat4 view;
     mat4 proj;
-} ubo2;
+    uint IndexOffset; 
+    uint ArrayOffset;
+} ubo;
 
 void main() {
-    uint index = ibo.indices[gl_VertexIndex];
+    uint index = ibo.indices[gl_VertexIndex + ubo.IndexOffset]; // Get the index from the index buffer
+    index += ubo.ArrayOffset; // Add the offset to the index
     
     // Transform the vertex position
-    vec4 pos = ubo2.proj * ubo2.view * ubo2.model * vec4(vbo.vertices[index].position, 1.0);
+    vec4 pos = ubo.proj * ubo.view * ubo.model * vec4(vbo.vertices[index].position, 1.0);
     gl_Position = pos;
     
     outData.fragPos = pos;

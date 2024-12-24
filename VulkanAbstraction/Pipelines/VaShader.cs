@@ -3,6 +3,7 @@ using Common;
 using Silk.NET.Shaderc;
 using Silk.NET.Vulkan;
 using VulkanAbstraction.Helpers;
+using VulkanAbstraction.Helpers.Other;
 
 namespace VulkanAbstraction.Pipelines;
 
